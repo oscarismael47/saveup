@@ -1,16 +1,17 @@
 import streamlit as st
+from pydantic import BaseModel, Field
+from typing import List, Annotated
 from langchain_openai import ChatOpenAI
 from langgraph.store.memory import InMemoryStore
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.store.base import BaseStore
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.tools import tool
+from langchain_core.tools import tool, InjectedToolCallId
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt, Command
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from langgraph.prebuilt import InjectedState # To access (read) the graph state inside the tools, you can use a special parameter annotation — InjectedState
 
 
 MODEL = st.secrets.get("OPENAI_MODEL")
@@ -82,6 +83,9 @@ Your response should be a well-structured plan that includes sections for:
 Ensure the tone is supportive and encouraging.
 """
 
+class State(MessagesState):
+    financial_plan: dict
+
 class FinancialPlan(BaseModel):
     summary: str = Field(..., description="A concise overview of the current financial situation, including income, expenses, assets, liabilities, and overall financial health.")
     budgeting_recommendations: List[str] = Field(..., description="Specific and actionable advice for budgeting, tracking expenses, and managing monthly cash flow.")
@@ -90,7 +94,7 @@ class FinancialPlan(BaseModel):
     risk_and_emergency: List[str] = Field(..., description="Evaluation of risks (e.g., job loss, unexpected expenses) and recommendations for building an adequate emergency fund.")
     next_steps: List[str] = Field(..., description="Clear, encouraging actions the individual should take next to improve their financial situation.")
 
-def assistant(state: MessagesState, config: RunnableConfig, store: BaseStore):
+def assistant(state: State, config: RunnableConfig, store: BaseStore):
     """Load memory from the store and use it to personalize the chatbot's response."""
     
     # Get the user ID from the config
@@ -116,7 +120,7 @@ def assistant(state: MessagesState, config: RunnableConfig, store: BaseStore):
 
     return {"messages": response}
 
-def extract_write_information(state: MessagesState, config: RunnableConfig, store: BaseStore):
+def extract_write_information(state: State, config: RunnableConfig, store: BaseStore):
     """Reflect on the chat history and save a memory to the store."""
     
     # Get the user ID from the config
@@ -140,7 +144,7 @@ def extract_write_information(state: MessagesState, config: RunnableConfig, stor
     # Write value as a dictionary with a memory key
     store.put(namespace, key, {"financial_information": new_financial_information.content})
 
-def should_continue(state: MessagesState):
+def should_continue(state: State):
     last_message = state["messages"][-1]
     if last_message.tool_calls:
         return "tools"
@@ -148,7 +152,8 @@ def should_continue(state: MessagesState):
 
 
 @tool("generate_financial_plan")
-def generate_financial_plan(financial_information: str) -> str:
+def generate_financial_plan(financial_information: str,
+                            tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
     Generate a financial plan using the financial user information
 
@@ -163,7 +168,7 @@ def generate_financial_plan(financial_information: str) -> str:
             "question":("I have gathered enough information to generate your personalized financial plan. "
                         "Please review the details above. Do you agree with this information, or would you like to update any part of it before I proceed?",
                         "ACCEPT, DECLINE, EDIT"),
-            "financial_information":financial_information            
+            "financial_information": financial_information            
             })    
     
     if response in ("accept", "ACCEPT", "yes" ):
@@ -175,9 +180,14 @@ def generate_financial_plan(financial_information: str) -> str:
 
     system_msg = GENERATE_FINANCIAL_PLAN_INSTRUCTION.format(financial_information=financial_information)
     financial_plan = MODEL.with_structured_output(FinancialPlan).invoke([SystemMessage(content=system_msg)])
-
-    return financial_plan.model_dump()
-
+    financial_plan = financial_plan.model_dump()
+    #return financial_plan.model_dump()
+    return Command(update={
+        "financial_plan": financial_plan,
+        "messages": [
+            ToolMessage(financial_plan, tool_call_id=tool_call_id)
+        ]
+    }) # reference:  https://langchain-ai.github.io/langgraph/how-tos/tool-calling/?_gl=1*1rfn5oz*_gcl_au*MTIxNjc5NTc5Ny4xNzUyMDkzMDY2*_ga*MzU1ODY4ODkzLjE3NTIwOTMwNjY.*_ga_47WX3HKKY2*czE3NTc1MTQ4ODIkbzQxJGcxJHQxNzU3NTE1OTE5JGo2MCRsMCRoMA..#short-term-memory
 
 
 def invoke(message, thread_id="1", user_id="1"):
@@ -208,14 +218,14 @@ def invoke(message, thread_id="1", user_id="1"):
     else:
         interruption = None
     
-    return response["messages"], interruption
+    return response, interruption
 
 tools = [generate_financial_plan]
 MODEL_WITH_TOOLS = MODEL.bind_tools(tools)
 tool_node = ToolNode(tools)
 
 # Define the graph
-builder = StateGraph(MessagesState)
+builder = StateGraph(State)
 builder.add_node("assistant", assistant)
 builder.add_node("tools", tool_node)
 builder.add_node("extract_write_information", extract_write_information)
@@ -247,11 +257,16 @@ if __name__ == "__main__":
         if user_message.lower() == "exit":
             break
         
-        messages, interruption = invoke(user_message)
+        response, interruption = invoke(user_message)
+        ai_message =  response["messages"][-1].content
+        
         if interruption is not None:
             print("Current financial information: ",  interruption["financial_information"])
             print("Assinstant: ", interruption["question"])
         else:
-            print("Assistant:", messages[-1].content)
-        #print("Messages:", messages)
+            print("Assistant:", ai_message )
+            if "financial_plan" in response:
+                financial_plan = response["financial_plan"]
+                print("$$$$ FInancial Plan $$$$")
+                print(financial_plan)
         print("-----")
