@@ -1,7 +1,7 @@
 langchain-openai
 langgraph
 streamlit
-
+reportlab
 ## create env
 # uv venv --python 3.12
 

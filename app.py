@@ -1,33 +1,23 @@
 import uuid
+import pandas as pd
 import streamlit as st
 from agent.agent import invoke
+from file_helper import  generate_pdf_bytes
 
-st.title("Chatbot with langgraph")
+def update_selection_value(value):
+    st.session_state.selection = value
+
+
+filename="out/financial_plan.pdf"
+
+st.title("Save Up")
 
 # Sidebar: system message input
 with st.sidebar:
-    st.header("Chat Settings")
-    system_prompt = st.text_area(
-        "System Message",
-        value=st.session_state.get("system_prompt", "You are a helpful assistant"),
-        help="Define how the assistant should behave.",
-        height=300
-    )
+    pass
 
-    ## display agent_with_memory.png
-    st.subheader("Agent Memory Visualization")
-    st.write("This image shows the agent's memory and state transitions.")
-    st.image("agent_with_memory.png")
-
-    # Update agent if system prompt changes
-    if "system_prompt" not in st.session_state or st.session_state.system_prompt != system_prompt:
-        st.session_state.system_prompt = system_prompt
-        st.session_state.abot = Agent(system=system_prompt)
-        st.session_state.messages = []  # optionally clear history if system changes
-
-# Initialize session state
-if "abot" not in st.session_state:
-    st.session_state.abot = Agent(system=system_prompt)
+if "user_id" not in st.session_state:
+    st.session_state.user_id = "001"  
 
 if "chat_id" not in st.session_state:
     st.session_state.chat_id = str(uuid.uuid4())
@@ -35,18 +25,68 @@ if "chat_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "financial_plan" not in st.session_state:
+    st.session_state.financial_plan = {}
+
+if "selection" not in st.session_state:
+    st.session_state.selection = None
+
+
+
+
 # Display chat messages from history on app rerun
 for message in st.session_state.messages:
     with st.chat_message(name=message["role"]):
         st.markdown(message["content"])
 
 # Handle new user input
-if message := st.chat_input("What is up?"):
-    st.session_state.messages.append({"role": "user", "content": message})
-    with st.chat_message("user"):
-        st.markdown(message)
+user_message = st.chat_input("What is up?")
 
-    ai_response = st.session_state.abot.invoke(message, thread_id=st.session_state.chat_id)
-    with st.chat_message("assistant"):
-        st.markdown(ai_response)
-    st.session_state.messages.append({"role": "assistant", "content": ai_response})
+if st.session_state.selection is not None:
+    user_message = st.session_state.selection
+    st.session_state.selection = None
+
+if user_message :
+    st.session_state.messages.append({"role": "user", "content": user_message})
+    with st.chat_message("user"):
+        st.markdown(user_message)
+
+    response, interruption = invoke(user_message,
+                        thread_id=st.session_state.chat_id,
+                        user_id=st.session_state.user_id)
+    
+    ai_message =  response["messages"][-1].content
+
+    
+
+    if interruption is not None:
+        financial_information =  interruption["financial_information"]
+        interruption_text =  interruption["question"]["text"]
+        interruption_options = interruption["question"]["options"]
+        ai_message = interruption_text
+
+        df = pd.DataFrame(list(financial_information.items()), columns=["Field", "Value"])
+
+
+        with st.chat_message("assistant"):
+            st.markdown(ai_message)
+            st.dataframe(df,width="content")
+
+            flex = st.container(horizontal=True, horizontal_alignment="left")
+            for option in interruption_options:
+                flex.button(option, on_click=update_selection_value, args=(option,))
+
+    else:
+        with st.chat_message("assistant"):
+            st.markdown(ai_message)
+            if "financial_plan" in response:
+                financial_plan = response["financial_plan"]
+                if financial_plan != st.session_state.financial_plan:
+                    st.session_state.financial_plan = financial_plan
+                    pdf_buffer = generate_pdf_bytes(st.session_state.financial_plan)
+                    st.download_button( label="⬇️ Download PDF",
+                                        data=pdf_buffer,
+                                        file_name="financial_plan.pdf",
+                                        mime="application/pdf")
+
+    st.session_state.messages.append({"role": "assistant", "content": ai_message})

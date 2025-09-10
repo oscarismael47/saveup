@@ -152,24 +152,34 @@ def should_continue(state: State):
 
 
 @tool("generate_financial_plan")
-def generate_financial_plan(financial_information: str,
+def generate_financial_plan(financial_information: dict,
                             tool_call_id: Annotated[str, InjectedToolCallId]) -> Command:
     """
-    Generate a financial plan using the financial user information
+    Generate a personalized financial plan based on the provided user information.
 
     Parameters:
-        financial_information (str): The financial user information
+        financial_information (dict): Dictionary containing the user's financial data. 
+            Expected keys:
+                - financial_goal (str): The user's main financial objective (e.g., "buy a house").
+                - goal_amount (float): Target amount needed to achieve the goal.
+                - savings (float): Current savings balance.
+                - time_period (str): Time horizon to reach the goal, in months or years.
+                - monthly_expenses (float): Average monthly expenses.
+                - salary (float): Monthly income/salary.
+
+        tool_call_id (str): An auto-injected identifier for tracking the tool call.
 
     Returns:
-        str: financial plan
+        Command: A command containing the generated financial plan.
     """
 
     response = interrupt({
-            "question":("I have gathered enough information to generate your personalized financial plan. "
-                        "Please review the details above. Do you agree with this information, or would you like to update any part of it before I proceed?",
-                        "ACCEPT, DECLINE, EDIT"),
-            "financial_information": financial_information            
-            })    
+                        "question": { 
+                            "text": "Please review the current Financial Information. Do you agree with this information, or would you like to update any part of it before I proceed?",
+                            "options": ["ACCEPT", "DECLINE", "EDIT"]
+                         },
+                        "financial_information": financial_information            
+                        })    
     
     if response in ("accept", "ACCEPT", "yes" ):
         pass
