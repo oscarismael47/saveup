@@ -1,6 +1,7 @@
 import uuid
 import pandas as pd
 import streamlit as st
+from datetime import datetime
 from agent.agent import invoke
 from file_helper import  generate_pdf_bytes
 
@@ -10,11 +11,20 @@ def update_selection_value(value):
 
 filename="out/financial_plan.pdf"
 
-st.title("SaveUp")
 
 # Sidebar: system message input
 with st.sidebar:
-    pass
+    st.title("SaveUp")
+    with st.expander("See Chat History"):
+
+        with st.container(horizontal=False, horizontal_alignment="left", gap=None):
+            st.button("New Chat", type="tertiary")
+            st.button("Chat 1", type="tertiary")
+            st.button("Chat 2", type="tertiary")
+            st.button("Chat 3", type="tertiary")
+    st.write("**Agent Graph**")
+    st.image("static/agent.png", caption="Agent Graph")
+
 
 if "user_id" not in st.session_state:
     st.session_state.user_id = "001"  
@@ -40,17 +50,15 @@ for message in st.session_state.messages:
             if "financial_information" in message["metadata"]:
                 df = message["metadata"]["financial_information"]
                 st.dataframe(df,width="content", hide_index=True)
-            #
-            #if "download_pdf_btn" in message["metadata"]:
-            #    pdf_buffer = message["metadata"]["download_pdf_btn"]["pdf_buffer"]
-            #    st.download_button( label="⬇️ Download PDF",
-            #                            data=pdf_buffer,
-            #                            file_name="financial_plan.pdf",
-            #                            mime="application/pdf")
+        
+            if "pdf_buffer" in message["metadata"]:
+                pdf_buffer = message["metadata"]["pdf_buffer"]
+                st.download_button( label="⬇️ Download PDF",
+                                    key=datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
+                                    data=pdf_buffer,
+                                    file_name="financial_plan.pdf",
+                                    mime="application/pdf")
 
-print("---------------Iteration-----------")
-for message in st.session_state.messages:
-    print(message)
 
 # Handle new user input
 user_message = st.chat_input("What is up?")
@@ -73,7 +81,6 @@ if user_message :
     
     metadata = {}
     if interruption is not None:
-        print("interruption")
         financial_information =  interruption["financial_information"]
         interruption_text =  interruption["question"]["text"]
         interruption_options = interruption["question"]["options"]
@@ -101,9 +108,11 @@ if user_message :
                     st.session_state.financial_plan = financial_plan
                     pdf_buffer = generate_pdf_bytes(st.session_state.financial_plan)
                     st.download_button( label="⬇️ Download PDF",
+                                        key=datetime.now().strftime("%Y_%m_%d_%H_%M_%S"),
                                         data=pdf_buffer,
                                         file_name="financial_plan.pdf",
-                                        mime="application/pdf")
+                                        mime="application/pdf"
+                                        )
                     metadata = {"pdf_buffer": pdf_buffer}
 
     st.session_state.messages.append({"role": "assistant", "content": ai_message, "metadata":metadata})

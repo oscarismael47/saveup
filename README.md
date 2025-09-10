@@ -2,6 +2,9 @@
 
 SaveUp is an AI-powered financial planning assistant that helps users create personalized financial plans based on their goals, income, expenses, and savings.
 
+![Example](./static/recording.gif)
+
+
 ## Features
 
 - Conversational chatbot for financial planning

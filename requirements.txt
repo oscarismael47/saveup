@@ -11,3 +11,9 @@ reportlab
 
 ## install dependencies
 # uv pip install -r requirements.txt
+
+
+# Example
+
+# I want to buy a TV that costs 400 Dollars. I currently have no savings, and my monthly expenses are 50 dollars. I plan to reach my goal within 5 months
+# My monthly salary is 500 dollars
