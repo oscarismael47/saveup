@@ -20,27 +20,36 @@ MODEL = ChatOpenAI(model=MODEL, api_key=API_KEY, temperature=1)
 
 
 # Chatbot instruction
-MODEL_SYSTEM_MESSAGE = """You are a financial assistant chatbot. Your primary goal is to help users create a personalized plan to achieve their financial goals.
+MODEL_SYSTEM_MESSAGE = """
+You are a financial assistant chatbot. Your primary goal is to help users create a personalized financial plan to achieve their goals.
 
 **Core Instructions:**
 
-1.  **Information Gathering:** Begin by asking the user for all the necessary information to create their financial plan. You must gather the following details:
-    * **Financial Goal** (e.g., "buy a car," "vacation")
-    * **Goal Amount** (the total cost of the goal)
-    * **Current Savings**
-    * **Desired Time Period** (the timeframe to achieve the goal)
-    * **Monthly Expenses**
-    * **Salary**
+1. **Information Gathering:**  
+   Collect all necessary details to create a comprehensive financial plan:
+   - **Financial Goal** (e.g., "buy a car", "vacation")  
+   - **Goal Amount**  
+   - **Current Savings**  
+   - **Desired Time Period**  
+   - **Monthly Expenses**  
+   - **Salary**
 
-2.  **Review and Request:** Check the provided user information. If any of the fields listed above are missing, 
-        politely ask the user to provide them before proceeding. Do not generate a plan until all required information is available.
+2. **Validation:**  
+   If any required fields are missing, politely ask the user to provide them before generating the plan.
 
-3.  **Plan Generation:** Once you have all the necessary information, call 'generate_financial_plan' tool to generate the financial plan.
-        Finally Return a detailed financial plan report
+3. **Plan Generation:**  
+   Once all details are available, call the `generate_financial_plan` tool to create the plan. Return a detailed, actionable financial plan.
 
+**Formatting Guidelines:**  
+- Use **HTML tags** to structure the response (e.g. `<h3>`, `<p>`, `<ul>`, `<li>`, `<strong>`) for better visualization.
+- Avoid to use these HTML tags : `<h1>` , `<h2>`, 
+- Avoid using markdown syntax.  
+- Ensure the HTML is clean and easy to read when rendered in a browser or UI component.
 
-**Current User Financial Information:**
-{financial_information}"""
+**Current User Financial Information:**  
+{financial_information}
+"""
+
 
 # System Memory Update Instruction
 GET_FINANCIAL_INFORMTATION_INSTRUCTION = """ You are an internal system tool responsible for updating the financial user information.
@@ -60,7 +69,6 @@ GET_FINANCIAL_INFORMTATION_INSTRUCTION = """ You are an internal system tool res
 4.  Based on the chat history below, update the user information
 
 **Important:** Only include information explicitly stated by the user. Do not make assumptions, guesses, or inferences.
-
 **Current Data:**
 CURRENT_FINANCIAL_INFORMATION: {financial_information}
 CHAT_HISTORY:
@@ -176,12 +184,12 @@ def generate_financial_plan(financial_information: dict,
     response = interrupt({
                         "question": { 
                             "text": "Please review the current Financial Information. Do you agree with this information, or would you like to update any part of it before I proceed?",
-                            "options": ["ACCEPT", "DECLINE", "EDIT"]
+                            "options": ["ACCEPT", "DECLINE"]
                          },
                         "financial_information": financial_information            
                         })    
     
-    if response in ("accept", "ACCEPT", "yes" ):
+    if response == "ACCEPT":
         pass
     elif response == "edit":
         pass # To do https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/add-human-in-the-loop/#review-tool-calls
@@ -227,7 +235,6 @@ def invoke(message, thread_id="1", user_id="1"):
         interruption = response["__interrupt__"][0].value
     else:
         interruption = None
-    
     return response, interruption
 
 tools = [generate_financial_plan]
